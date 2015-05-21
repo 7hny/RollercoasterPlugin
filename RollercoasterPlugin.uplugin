@@ -7,7 +7,8 @@
 	"CreatedBy" : "Teddy",
 	"CreatedByURL" : "https://developer.oculusvr.com/forums/viewtopic.php?t=8032",
 	"Description" : "A rollercoaster player controller that follows a Landscape spline mesh",
-	"Category" : "Virtual Reality",
+    "Category": "Virtual Reality",
+    "CanContainContent" : "true",
 	
     "Modules" :
 	[

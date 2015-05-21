@@ -54,7 +54,7 @@ FInterpCurveVector& HackAccessSplineInfo(ULandscapeSplineSegment* SplineSegment)
 }
 
 //Player Controller class that moves along a Landscape Spline
-ARollercoasterPlayerController::ARollercoasterPlayerController(const class FPostConstructInitializeProperties& PCIP)
+ARollercoasterPlayerController::ARollercoasterPlayerController(const class FObjectInitializer& PCIP)
 : Super(PCIP)
 {
 	CurentSegmentIdx = 0;

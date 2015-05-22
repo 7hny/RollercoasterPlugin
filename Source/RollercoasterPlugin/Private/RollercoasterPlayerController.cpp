@@ -44,7 +44,7 @@ static float GetKeyForDistance(const FInterpCurveVector& SplineInfo, const float
 FInterpCurveVector& HackAccessSplineInfo(ULandscapeSplineSegment* SplineSegment)
 {
 	//This ugly code will crash badly if the ULandscapeSplineSegment changes
-	BYTE* HackPtr = (BYTE*)SplineSegment;
+	uint8* HackPtr = (uint8*)SplineSegment;
 #if WITH_EDITORONLY_DATA
 	HackPtr += STRUCT_OFFSET(ULandscapeSplineSegment, LDMaxDrawDistance) + sizeof(uint32) * 3;
 #else
@@ -226,7 +226,7 @@ void ARollercoasterPlayerController::UpdatePlayer(float StepTime)
 	//Do some moving along the track!
 	const float NewKeyTime = GetKeyForDistance(SplineInfo, CurrentSegmentDelta);
 	const FVector NewKeyPos = TrackSplines->GetOwner()->GetActorLocation() + SplineInfo.Eval(NewKeyTime, FVector::ZeroVector);
-	const FVector NewKeyTangent = SplineInfo.EvalDerivative(NewKeyTime, FVector::ZeroVector).SafeNormal();
+	const FVector NewKeyTangent = SplineInfo.EvalDerivative(NewKeyTime, FVector::ZeroVector).GetSafeNormal();
 	FRotator NewRotation = NewKeyTangent.Rotation();
 
 	// Calculate the roll values

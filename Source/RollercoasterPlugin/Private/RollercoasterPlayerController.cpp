@@ -2,56 +2,57 @@
 
 #include "RollercoasterPluginPrivatePCH.h"
 #include "IHeadMountedDisplay.h"
+#include "Components/SplineComponent.h"
 
-//Spline helper functions
-static float ApproxLength(const FInterpCurveVector& SplineInfo, const float Start = 0.0f, const float End = 1.0f, const int32 ApproxSections = 32)
-{
-	float SplineLength = 0;
-	FVector OldPos = SplineInfo.Eval(Start, FVector::ZeroVector);
-	for (int32 i = 1; i <= ApproxSections; i++)
-	{
-		FVector NewPos = SplineInfo.Eval(FMath::Lerp(Start, End, (float)i / (float)ApproxSections), FVector::ZeroVector);
-		SplineLength += (NewPos - OldPos).Size();
-		OldPos = NewPos;
-	}
-
-	return SplineLength;
-}
-
-static float GetKeyForDistance(const FInterpCurveVector& SplineInfo, const float Distance, const int32 ApproxSections = 32)
-{
-	float SplineLength = 0;
-	FVector OldPos = SplineInfo.Eval(0.0f, FVector::ZeroVector);
-	for (int32 i = 1; i <= ApproxSections; i++)
-	{
-		FVector NewPos = SplineInfo.Eval((float)i / (float)ApproxSections, FVector::ZeroVector);
-		float SectionLength = (NewPos - OldPos).Size();
-
-		if (SplineLength + SectionLength >= Distance)
-		{
-			float DistanceAlongSection = Distance - SplineLength;
-			float SectionDelta = DistanceAlongSection / SectionLength;
-			return i / (float)ApproxSections - (1.f - SectionDelta) / (float)ApproxSections;
-		}
-		SplineLength += SectionLength;
-		OldPos = NewPos;
-	}
-
-	return 1.0f;
-}
+////Spline helper functions
+//static float ApproxLength(const FInterpCurveVector& SplineInfo, const float Start = 0.0f, const float End = 1.0f, const int32 ApproxSections = 32)
+//{
+//	float SplineLength = 0;
+//	FVector OldPos = SplineInfo.Eval(Start, FVector::ZeroVector);
+//	for (int32 i = 1; i <= ApproxSections; i++)
+//	{
+//		FVector NewPos = SplineInfo.Eval(FMath::Lerp(Start, End, (float)i / (float)ApproxSections), FVector::ZeroVector);
+//		SplineLength += (NewPos - OldPos).Size();
+//		OldPos = NewPos;
+//	}
+//
+//	return SplineLength;
+//}
+//
+//static float GetKeyForDistance(const FInterpCurveVector& SplineInfo, const float Distance, const int32 ApproxSections = 32)
+//{
+//	float SplineLength = 0;
+//	FVector OldPos = SplineInfo.Eval(0.0f, FVector::ZeroVector);
+//	for (int32 i = 1; i <= ApproxSections; i++)
+//	{
+//		FVector NewPos = SplineInfo.Eval((float)i / (float)ApproxSections, FVector::ZeroVector);
+//		float SectionLength = (NewPos - OldPos).Size();
+//
+//		if (SplineLength + SectionLength >= Distance)
+//		{
+//			float DistanceAlongSection = Distance - SplineLength;
+//			float SectionDelta = DistanceAlongSection / SectionLength;
+//			return i / (float)ApproxSections - (1.f - SectionDelta) / (float)ApproxSections;
+//		}
+//		SplineLength += SectionLength;
+//		OldPos = NewPos;
+//	}
+//
+//	return 1.0f;
+//}
 
 //Nasty hack to access protected member SplineInfo inside ULandscapeSplineSegment class. Don't judge me!
-FInterpCurveVector& HackAccessSplineInfo(ULandscapeSplineSegment* SplineSegment)
-{
-	//This ugly code will crash badly if the ULandscapeSplineSegment changes
-	uint8* HackPtr = (uint8*)SplineSegment;
-#if WITH_EDITORONLY_DATA
-	HackPtr += STRUCT_OFFSET(ULandscapeSplineSegment, LDMaxDrawDistance) + sizeof(uint32) * 3;
-#else
-	HackPtr += STRUCT_OFFSET(ULandscapeSplineSegment, Connections[1]) + sizeof(FLandscapeSplineSegmentConnection);
-#endif
-	return *(FInterpCurveVector*)HackPtr;
-}
+//FInterpCurveVector& HackAccessSplineInfo(ULandscapeSplineSegment* SplineSegment)
+//{
+//	//This ugly code will crash badly if the ULandscapeSplineSegment changes
+//	uint8* HackPtr = (uint8*)SplineSegment;
+//#if WITH_EDITORONLY_DATA
+//	HackPtr += STRUCT_OFFSET(ULandscapeSplineSegment, LDMaxDrawDistance) + sizeof(uint32) * 3;
+//#else
+//	HackPtr += STRUCT_OFFSET(ULandscapeSplineSegment, Connections[1]) + sizeof(FLandscapeSplineSegmentConnection);
+//#endif
+//	return *(FInterpCurveVector*)HackPtr;
+//}
 
 //Player Controller class that moves along a Landscape Spline
 ARollercoasterPlayerController::ARollercoasterPlayerController(const class FObjectInitializer& PCIP)
@@ -90,84 +91,86 @@ void ARollercoasterPlayerController::Possess(APawn* PawnToPossess)
 		PlayerCameraManager->ViewRollMax = 359.999f;
 	}
 
-	if (GetPawn())
-	{
-		for (TObjectIterator<ULandscapeSplinesComponent> ObjIt; ObjIt; ++ObjIt)
-		{
-			TrackSplines = *ObjIt;
+	//if (GetPawn())
+	//{
+	//	
+	//	for (TObjectIterator<ULandscapeSplinesComponent> ObjIt; ObjIt; ++ObjIt)
+	//	{
+	//		TrackSplines = *ObjIt;
 
-			ULandscapeSplineControlPoint* ClosestControlPoint = nullptr;
+	//		ULandscapeSplineControlPoint* ClosestControlPoint = nullptr;
 
-			//Find the controlpoint closest to the player start point
-			FVector PlayerStartLocation = GetPawn()->GetActorLocation() - TrackSplines->GetOwner()->GetActorLocation();
-			float ClosestDistSq = FLT_MAX;
-			for (int32 i = 0; i < TrackSplines->ControlPoints.Num(); i++)
-			{
-				float DistSq = (TrackSplines->ControlPoints[i]->Location - PlayerStartLocation).SizeSquared();
-				if (DistSq < ClosestDistSq)
-				{
-					ClosestDistSq = DistSq;
-					ClosestControlPoint = TrackSplines->ControlPoints[i];
-				}
-			}
+	//		//Find the controlpoint closest to the player start point
+	//		FVector PlayerStartLocation = GetPawn()->GetActorLocation() - TrackSplines->GetOwner()->GetActorLocation();
+	//		float ClosestDistSq = FLT_MAX;
+	//		for (int32 i = 0; i < TrackSplines->ControlPoints.Num(); i++)
+	//		{
+	//			float DistSq = (TrackSplines->ControlPoints[i]->Location - PlayerStartLocation).SizeSquared();
+	//			if (DistSq < ClosestDistSq)
+	//			{
+	//				ClosestDistSq = DistSq;
+	//				ClosestControlPoint = TrackSplines->ControlPoints[i];
+	//			}
+	//		}
 
-			//Build up an ordered list of track segments (the TrackSplines->Segments array can be in random order)
-			bool bTrackHasErrors = false;
-			OrderedSegments.Empty(TrackSplines->Segments.Num());
-			ULandscapeSplineControlPoint* CurrentControlPoint = ClosestControlPoint;
-			while (CurrentControlPoint)
-			{
-				int32 i = 0;
-				for (; i < CurrentControlPoint->ConnectedSegments.Num(); i++)
-				{
-					if (OrderedSegments.Num() == 0 || CurrentControlPoint->ConnectedSegments[i].Segment != OrderedSegments[0])
-					{
-						OrderedSegments.Insert(CurrentControlPoint->ConnectedSegments[i].Segment, 0);
-						check(CurrentControlPoint != CurrentControlPoint->ConnectedSegments[i].GetFarConnection().ControlPoint);
-						CurrentControlPoint = CurrentControlPoint->ConnectedSegments[i].GetFarConnection().ControlPoint;
-						break;
-					}
-				}
+	//		//Build up an ordered list of track segments (the TrackSplines->Segments array can be in random order)
+	//		bool bTrackHasErrors = false;
+	//		OrderedSegments.Empty(TrackSplines->Segments.Num());
+	//		ULandscapeSplineControlPoint* CurrentControlPoint = ClosestControlPoint;
+	//		while (CurrentControlPoint)
+	//		{
+	//			int32 i = 0;
+	//			for (; i < CurrentControlPoint->ConnectedSegments.Num(); i++)
+	//			{
+	//				if (OrderedSegments.Num() == 0 || CurrentControlPoint->ConnectedSegments[i].Segment != OrderedSegments[0])
+	//				{
+	//					OrderedSegments.Insert(CurrentControlPoint->ConnectedSegments[i].Segment, 0);
+	//					check(CurrentControlPoint != CurrentControlPoint->ConnectedSegments[i].GetFarConnection().ControlPoint);
+	//					CurrentControlPoint = CurrentControlPoint->ConnectedSegments[i].GetFarConnection().ControlPoint;
+	//					break;
+	//				}
+	//			}
 
-				//We didn't find another segment to link to, we have an error!
-				if (i == CurrentControlPoint->ConnectedSegments.Num())
-				{
-					bTrackHasErrors = true;
-					break;
-				}
+	//			//We didn't find another segment to link to, we have an error!
+	//			if (i == CurrentControlPoint->ConnectedSegments.Num())
+	//			{
+	//				bTrackHasErrors = true;
+	//				break;
+	//			}
 
-				//Back to the start
-				if (CurrentControlPoint == ClosestControlPoint)
-					break;
-			}
+	//			//Back to the start
+	//			if (CurrentControlPoint == ClosestControlPoint)
+	//				break;
+	//		}
 
-			//If we found any segments that weren't linked, we have an error
-			if (OrderedSegments.Num() != TrackSplines->Segments.Num())
-				bTrackHasErrors = true;
+	//		//If we found any segments that weren't linked, we have an error
+	//		if (OrderedSegments.Num() != TrackSplines->Segments.Num())
+	//			bTrackHasErrors = true;
 
-			//If there are any errors, bail out!
-			if (bTrackHasErrors)
-			{
-				TrackSplines = nullptr;
-				OrderedSegments.Empty();
-				continue;
-			}
+	//		//If there are any errors, bail out!
+	//		if (bTrackHasErrors)
+	//		{
+	//			TrackSplines = nullptr;
+	//			OrderedSegments.Empty();
+	//			continue;
+	//		}
 
-			//Calculate the length of this point
-			const FInterpCurveVector& SplineInfo = HackAccessSplineInfo(OrderedSegments[0]);
-			CurrentSegmentLength = ApproxLength(SplineInfo);
+	//		//Calculate the length of this point
+	//		const FInterpCurveVector& SplineInfo = HackAccessSplineInfo(OrderedSegments[0]);
+	//		CurrentSegmentLength = ApproxLength(SplineInfo);
 
-			break;
-		}
-	}
+	//		break;
+	//	}
+	//	
+	//}
 }
 
 void ARollercoasterPlayerController::UnPossess()
 {
 	Super::UnPossess();
 
-	TrackSplines = nullptr;
-	OrderedSegments.Empty();
+	//TrackSplines = nullptr;
+	//OrderedSegments.Empty();
 }
 
 /* PlayerTick is only called if the PlayerController has a PlayerInput object.  Therefore, it will not be called on servers for non-locally controlled playercontrollers. */
@@ -184,14 +187,26 @@ void ARollercoasterPlayerController::PlayerTick(float DeltaTime)
 		AddVelocity = 0.f;
 	}
 
-	if (GetPawn() && TrackSplines)
-	{
+	//if (GetPawn() && TrackSplines)
+	//{
+	//	DeltaRemaining += DeltaTime;
+
+	//	static float FixedStepTime = 1.f / 150.f;
+	//	while (DeltaRemaining >= FixedStepTime)
+	//	{
+	//		UpdatePlayer(FixedStepTime);
+	//		DeltaRemaining -= FixedStepTime;
+	//	}
+	//}
+	//else 
+	if (GetPawn() && RollercoasterSplineComponent){
+
 		DeltaRemaining += DeltaTime;
 
 		static float FixedStepTime = 1.f / 150.f;
 		while (DeltaRemaining >= FixedStepTime)
 		{
-			UpdatePlayer(FixedStepTime);
+			UpdatePlayer2(FixedStepTime);
 			DeltaRemaining -= FixedStepTime;
 		}
 	}
@@ -201,46 +216,33 @@ void ARollercoasterPlayerController::PlayerTick(float DeltaTime)
 	Super::PlayerTick(DeltaTime);
 }
 
-// This function updates the player's position and camera position. This may be called from the PlayerTick multiple times per frame
-void ARollercoasterPlayerController::UpdatePlayer(float StepTime)
+/**
+* Updates the player's position and camera position along assigned spline component.
+* This may be called from the PlayerTick multiple times per frame
+*/
+void ARollercoasterPlayerController::UpdatePlayer2(float StepTime)
 {
 	//Cache the world to meters, so we can scale our world up/down
 	float WorldToMeters = GetWorldSettings() ? GetWorldSettings()->WorldToMeters : 1.f;
 
 	CurrentSegmentDelta += CurrentRollerCoasterVelocity*StepTime;
 
-	//If we're going to pass the next point this frame
-	if (CurrentSegmentDelta > CurrentSegmentLength)
+	//If we completed full circle
+	if (CurrentSegmentDelta > RollercoasterSplineComponent->GetSplineLength())
 	{
-		CurentSegmentIdx = CurentSegmentIdx + 1 >= OrderedSegments.Num() ? 0 : CurentSegmentIdx + 1;
+		UE_LOG(LogTemp, Warning, TEXT("Start over"));
 		CurrentSegmentDelta = 0.f;
-
-		//Calculate the length of this point
-		const FInterpCurveVector& SplineInfo = HackAccessSplineInfo(OrderedSegments[CurentSegmentIdx]);
-		CurrentSegmentLength = ApproxLength(SplineInfo);
 	}
 
-	ULandscapeSplineSegment* CurrentSegment = OrderedSegments[CurentSegmentIdx];
-	const FInterpCurveVector& SplineInfo = HackAccessSplineInfo(CurrentSegment);
+	// Player position
+	const FVector NewKeyPos = RollercoasterSplineComponent->GetWorldLocationAtDistanceAlongSpline(CurrentSegmentDelta);
+	// Spline Direction
+	const FVector NewKeyTangent = RollercoasterSplineComponent->GetWorldDirectionAtDistanceAlongSpline(CurrentSegmentDelta);
+	// Spline rotation
+	//FRotator NewRotation = NewKeyTangent.Rotation();
+	const FRotator NewRotation = RollercoasterSplineComponent->GetWorldRotationAtDistanceAlongSpline(CurrentSegmentDelta);
 
-	//Do some moving along the track!
-	const float NewKeyTime = GetKeyForDistance(SplineInfo, CurrentSegmentDelta);
-	const FVector NewKeyPos = TrackSplines->GetOwner()->GetActorLocation() + SplineInfo.Eval(NewKeyTime, FVector::ZeroVector);
-	const FVector NewKeyTangent = SplineInfo.EvalDerivative(NewKeyTime, FVector::ZeroVector).GetSafeNormal();
-	FRotator NewRotation = NewKeyTangent.Rotation();
-
-	// Calculate the roll values
-	float NewRotationRoll = 0.f;
-	if (CurrentSegment->Connections[0].ControlPoint && CurrentSegment->Connections[1].ControlPoint)
-	{
-		FVector StartLocation; FRotator StartRotation;
-		CurrentSegment->Connections[0].ControlPoint->GetConnectionLocationAndRotation(CurrentSegment->Connections[0].SocketName, StartLocation, StartRotation);
-		FVector EndLocation; FRotator EndRotation;
-		CurrentSegment->Connections[1].ControlPoint->GetConnectionLocationAndRotation(CurrentSegment->Connections[1].SocketName, EndLocation, EndRotation);
-		NewRotationRoll = FMath::Lerp(-StartRotation.Roll, -EndRotation.Roll, NewKeyTime);
-	}
-	NewRotation.Roll = NewRotationRoll;
-
+	
 	//Make the controller/camera face the right direction
 	ChairViewRotation = NewRotation;
 	if (GEngine->HMDDevice.IsValid() && GEngine->HMDDevice->IsHeadTrackingAllowed())
@@ -252,6 +254,7 @@ void ARollercoasterPlayerController::UpdatePlayer(float StepTime)
 			ChairViewRotation.Roll = 0;
 	}
 	SetControlRotation(ChairViewRotation);
+
 
 	//Make the pawn/chair move along the track
 	GetPawn()->SetActorLocation(NewKeyPos);
@@ -277,7 +280,94 @@ void ARollercoasterPlayerController::UpdatePlayer(float StepTime)
 			CurrentRollerCoasterVelocity += (Acceleration - Friction) * WorldToMeters * StepTime;
 		}
 	}
+
+
 }
+
+//// This function updates the player's position and camera position. This may be called from the PlayerTick multiple times per frame
+//void ARollercoasterPlayerController::UpdatePlayer(float StepTime)
+//{
+//	//Cache the world to meters, so we can scale our world up/down
+//	float WorldToMeters = GetWorldSettings() ? GetWorldSettings()->WorldToMeters : 1.f;
+//
+//	CurrentSegmentDelta += CurrentRollerCoasterVelocity*StepTime;
+//
+//	//If we're going to pass the next point this frame
+//	if (CurrentSegmentDelta > CurrentSegmentLength)
+//	{
+//		UE_LOG(LogTemp, Warning, TEXT("Next Segment"));
+//
+//		UE_LOG(LogTemp, Warning, TEXT("OrderedSegments.Num() = %d"), OrderedSegments.Num());
+//		UE_LOG(LogTemp, Warning, TEXT("CurentSegmentIdx = %d"), CurentSegmentIdx);
+//
+//		CurentSegmentIdx = CurentSegmentIdx + 1 >= OrderedSegments.Num() ? 0 : CurentSegmentIdx + 1;
+//		//CurentSegmentIdx = CurentSegmentIdx - 1 == OrderedSegments.Num() ? 0 : CurentSegmentIdx - 1;
+//
+//		CurrentSegmentDelta = 0.f;
+//
+//		//Calculate the length of this point
+//		const FInterpCurveVector& SplineInfo = HackAccessSplineInfo(OrderedSegments[CurentSegmentIdx]);
+//		CurrentSegmentLength = ApproxLength(SplineInfo);
+//	}
+//
+//	ULandscapeSplineSegment* CurrentSegment = OrderedSegments[CurentSegmentIdx];
+//	const FInterpCurveVector& SplineInfo = HackAccessSplineInfo(CurrentSegment);
+//
+//	//Do some moving along the track!
+//	const float NewKeyTime = GetKeyForDistance(SplineInfo, CurrentSegmentDelta);
+//	const FVector NewKeyPos = TrackSplines->GetOwner()->GetActorLocation() + SplineInfo.Eval(NewKeyTime, FVector::ZeroVector);
+//	const FVector NewKeyTangent = SplineInfo.EvalDerivative(NewKeyTime, FVector::ZeroVector).GetSafeNormal();
+//	FRotator NewRotation = NewKeyTangent.Rotation();
+//
+//	// Calculate the roll values
+//	float NewRotationRoll = 0.f;
+//	if (CurrentSegment->Connections[0].ControlPoint && CurrentSegment->Connections[1].ControlPoint)
+//	{
+//		FVector StartLocation; FRotator StartRotation;
+//		CurrentSegment->Connections[0].ControlPoint->GetConnectionLocationAndRotation(CurrentSegment->Connections[0].SocketName, StartLocation, StartRotation);
+//		FVector EndLocation; FRotator EndRotation;
+//		CurrentSegment->Connections[1].ControlPoint->GetConnectionLocationAndRotation(CurrentSegment->Connections[1].SocketName, EndLocation, EndRotation);
+//		NewRotationRoll = FMath::Lerp(-StartRotation.Roll, -EndRotation.Roll, NewKeyTime);
+//	}
+//	NewRotation.Roll = NewRotationRoll;
+//
+//	//Make the controller/camera face the right direction
+//	ChairViewRotation = NewRotation;
+//	if (GEngine->HMDDevice.IsValid() && GEngine->HMDDevice->IsHeadTrackingAllowed())
+//	{
+//		//Remove the Pitch and Roll for VR
+//		if (!ConfigCameraPitch && !BlueprintCameraPitch)
+//			ChairViewRotation.Pitch = 0;
+//		if (!ConfigCameraRoll && !BlueprintCameraRoll)
+//			ChairViewRotation.Roll = 0;
+//	}
+//	SetControlRotation(ChairViewRotation);
+//
+//	//Make the pawn/chair move along the track
+//	GetPawn()->SetActorLocation(NewKeyPos);
+//	GetPawn()->SetActorRotation(NewRotation);
+//
+//	//Offset the camera so it's above the seat
+//	CameraOffset = FRotationMatrix(NewRotation).GetScaledAxis(EAxis::Z) * CameraHeight * WorldToMeters;
+//
+//	//Adjust the velocity of the coaster. Increase acceleration/deceleration when on a slope
+//	if (!Stopped)
+//	{
+//		if (Climbing)
+//		{
+//			//Takes 4 seconds to accelerate to climbing speed from rest
+//			CurrentRollerCoasterVelocity = FMath::Min(ClimbingSpeed, CurrentRollerCoasterVelocity + StepTime * (ClimbingSpeed * 0.25f));
+//		}
+//		else
+//		{
+//			//Add acceleration/deceleration based on the angle of the track
+//			float Acceleration = FMath::Lerp(0.f, GravityAcceleration, -NewKeyTangent.Z);
+//			//Add friction on flat level track, less when on an incline
+//			float Friction = FrictionCoefficient * CurrentRollerCoasterVelocity * (1.f - FMath::Abs(NewKeyTangent.Z));
+//			CurrentRollerCoasterVelocity += (Acceleration - Friction) * WorldToMeters * StepTime;
+//		}
+//	}
+//}
 
 /**
 * Updates the rotation of player, based on ControlRotation after RotationInput has been applied.

@@ -15,11 +15,16 @@ class ARollercoasterPlayerController : public APlayerController
 	UPROPERTY()
 	FRotator ChairViewRotation;
 
-	UPROPERTY()
-	class ULandscapeSplinesComponent* TrackSplines;
+	// Rollercoaster track - spline component based
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = PlayerController)
+	class USplineComponent* RollercoasterSplineComponent;
 
-	UPROPERTY()
-	TArray<class ULandscapeSplineSegment*> OrderedSegments;
+
+	//UPROPERTY()
+	//class ULandscapeSplinesComponent* TrackSplines;
+
+	//UPROPERTY()
+	//TArray<class ULandscapeSplineSegment*> OrderedSegments;
 
 	UPROPERTY()
 	int32 CurentSegmentIdx;
@@ -80,7 +85,13 @@ public:
 	virtual void PlayerTick(float DeltaTime);
 
 	// This function updates the player's position and camera position. This may be called from the PlayerTick multiple times per frame
-	void UpdatePlayer(float StepTime);
+	//void UpdatePlayer(float StepTime);
+	
+	/**
+	* Updates the player's position and camera position along assigned spline component.
+	* This may be called from the PlayerTick multiple times per frame
+	*/
+	void UpdatePlayer2(float StepTime);
 
 	//Init functions
 	virtual void Possess(APawn* PawnToPossess);
